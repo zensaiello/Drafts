@@ -22,8 +22,8 @@ def buildArgs():
     parser.add_argument('-o', dest='outFileName', action='store', default=None,
                         help="Output to file instead of stdout.")
     parser.add_argument('-d', dest='dateString', action='store', default='10 min ago',
-                        help="Extract logs from date to present. Default value: '10 min ago'")
-    parser.add_argument('-q', dest='Query', action='store', default='',
+                        help="Extract logs from date to present. Default value: '1 min ago'")
+    parser.add_argument('-q', dest='Query', action='store', default='fields.type:*',
                         help="Query string used in Kibana")
 
     return parser.parse_args()
@@ -196,7 +196,7 @@ if __name__ == '__main__':
             esMsg = esLog['_source']['message']
             if isinstance(esMsg, (list, tuple)):
                 esMsg = esMsg[0]
-            print >>rOut, "{}/{}::'{}'".format(
+            print >>rOut, u"{}/{}::'{}'".format(
                 esLog['_source']['fields']['servicepath'],
                 esLog['_source']['fields']['instance'],
                 esMsg

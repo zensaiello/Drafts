@@ -13,26 +13,22 @@ usage:
 extract Zenoss Collection Service logs from ElasticSearch
 
 optional arguments:
-  -h, --help           show this help message and exit
-  -v LOGLEVEL          Set script logging level (DEBUG=10, INFO=20, WARN=30,
-                       *ERROR=40, CRTITICAL=50
-  -o OUTFILENAME       Output to file instead of stdout.
-   -C COLLECTORNAME     Collector service is running under. Default:
-                       "localhost"
-  -S SERVICENAME       Service to extract logs for
-  -d DATESTRING        Extract logs from date to present. Default value: '10
-                       min ago'
-  -f ADDITIONALFILTER  Addtional filter to collectorName & serviceName.
-                       Example: '"match":{"message": "Detailed Scheduler
-                       Statistics"}'
+  -h, --help      show this help message and exit
+  -v LOGLEVEL     Set script logging level (DEBUG=10, INFO=20, WARN=30,
+                  *ERROR=40, CRTITICAL=50
+  -o OUTFILENAME  Output to file instead of stdout.
+  -d DATESTRING   Extract logs from date to present. Default value: '10 min
+                  ago'
+  -q QUERY        Query string
+
 ```
 
 ### Examples:
 
 ```
-# ./ElasticSrch_extractZenossCollectionServiceLogs.py -S zenpython -d "1 day ago"
+# ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "1 min ago"
 
-# ./ElasticSrch_extractZenossCollectionServiceLogs.py -S zenpython -d "1 hour ago" -f '"match":{"message": "Detailed Scheduler Statistics"}' -o zenpython.stats.log
+# ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "24 hours ago" -q "fields.type:zenpython" -d "1 hour ago" -o zenpython.stats.log
 
-# ./ElasticSrch_extractZenossCollectionServiceLogs.py -S zenpython -d "1 hour ago" -f '"match":{"message": "ERROR"}'
+# ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "12 hours ago" -q "fields.type:zenmodeler AND (message:\"Starting collector\" OR message:\"Scan time\" OR message:\"scanned during collector loop\")"
 ```

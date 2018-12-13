@@ -1,4 +1,5 @@
-#!/bin/env python
+
+#!/usr/bin/env python
 #from zenApiLib import TitleParser
 import argparse
 import sys
@@ -20,15 +21,10 @@ def buildArgs():
                         ' INFO=20, WARN=30, *ERROR=40, CRTITICAL=50')
     parser.add_argument('-o', dest='outFileName', action='store', default=None,
                         help="Output to file instead of stdout.")
-    parser.add_argument('-C', dest='collectorName', action='store',  default='localhost',
-                        help='Collector service is running under. Default: "localhost"')
-    parser.add_argument('-S', dest='serviceName', action='store',
-                        required=True, help="Service to extract logs for")
     parser.add_argument('-d', dest='dateString', action='store', default='10 min ago',
                         help="Extract logs from date to present. Default value: '10 min ago'")
-    parser.add_argument('-f', dest='additionalFilter', action='append', default=[],
-                        help="Addtional filter to collectorName & serviceName. Example:\n"
-                        '\'"match":{"message": "Detailed Scheduler Statistics"}\'')
+    parser.add_argument('-q', dest='Query', action='store', default='',
+                        help="Query string used in Kibana")
 
     return parser.parse_args()
 
@@ -46,7 +42,7 @@ class ElasticSrchConnector(object):
 
     def getRequestSession(self):
         '''
-        Setup defaults for using the requests library 
+        Setup defaults for using the requests library
         '''
         self.log.info('getRequestSession;')
         s = requests.Session()
@@ -81,7 +77,7 @@ class ElasticSrchConnector(object):
             self.log.error(msg)
         else:
             return self._validateRawResponse(r)
-    
+
     def scroll(self, payload):
         scrollResults = self.callApi(payload)
         if '_scroll_id' in scrollResults:
@@ -94,19 +90,19 @@ class ElasticSrchConnector(object):
         apiResultsTotal = scrollResults['hits']['total']
 
         yield scrollResults
-        
+
         while (apiResultsReturned < apiResultsTotal):
             scrollResults = self.callApi(json.dumps(scrollPayload))
             apiResultsReturned += len(scrollResults['hits']['hits'])
             yield scrollResults
-        
+
         r = self.requestSession.delete(self._url,
             verify=False,
             timeout=self.config['timeout'],
             headers={'content-type':'application/json', 'kbn-xsrf': 'true'},
             data=json.dumps(scrollPayload),
         )
-            
+
     def _validateRawResponse(self, r):
         '''
         todo
@@ -161,25 +157,26 @@ if __name__ == '__main__':
     esQuery = {
         "size":1000,
         "query": {
-            "bool": {
-                "must": [
-                    {"match":{"fields.type": args['serviceName']}},
-                    {"match":{"fields.monitor": args['collectorName']}}
-                ]
-            }
-        },
-        "filter": {
-            "bool": {
-                "must": [{
-                    "range": {
-                        "@timestamp": {
-                            "gte": filterDate,
-                                   
+        "filtered": {
+            "query": {
+                "query_string": {
+                    "query": args['Query'],
+                    "analyze_wildcard": True
+                }
+            },
+            "filter": {
+                "bool": {
+                    "must": [{
+                        "range": {
+                            "@timestamp": {
+                                "gte": filterDate,
+
+                            }
                         }
-                    }
-                }]
+                    }]
+                }
             }
-        },
+        }},
         "sort":[{
             "@timestamp":{
                 "order":"asc",
@@ -187,9 +184,6 @@ if __name__ == '__main__':
             }
         }]
     }
-    if args['additionalFilter']:
-        for addFilter in args['additionalFilter']:
-            esQuery['query']['bool']['must'].append(json.loads('{{{}}}'.format(addFilter)))
     if args['loglevel'] > 30:
         print >>sys.stderr, "query:{}".format(pformat(esQuery))
     for esResults in api.scroll(json.dumps(esQuery)):
@@ -199,8 +193,11 @@ if __name__ == '__main__':
                 esResults['hits']['total']
             )
         for esLog in esResults['hits']['hits']:
+            esMsg = esLog['_source']['message']
+            if isinstance(esMsg, (list, tuple)):
+                esMsg = esMsg[0]
             print >>rOut, "{}/{}::'{}'".format(
                 esLog['_source']['fields']['servicepath'],
                 esLog['_source']['fields']['instance'],
-                esLog['_source']['message'][0]
+                esMsg
             )

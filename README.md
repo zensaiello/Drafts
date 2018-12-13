@@ -31,4 +31,7 @@ optional arguments:
 # ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "24 hours ago" -q "fields.type:zenpython" -d "1 hour ago" -o zenpython.stats.log
 
 # ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "12 hours ago" -q "fields.type:zenmodeler AND (message:\"Starting collector\" OR message:\"Scan time\" OR message:\"scanned during collector loop\")"
+
+# Great way to extract zenoss service stats output
+# ./ElasticSrch_extractZenossCollectionServiceLogs.py -d "12 hours ago" -q 'message:"Task States Summary"'
 ```

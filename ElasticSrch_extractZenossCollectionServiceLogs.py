@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python
 #from zenApiLib import TitleParser
 import argparse
@@ -40,6 +39,7 @@ class ElasticSrchConnector(object):
         self.requestSession = self.getRequestSession()
         self.payload = {}
 
+    
     def getRequestSession(self):
         '''
         Setup defaults for using the requests library
@@ -196,8 +196,14 @@ if __name__ == '__main__':
             esMsg = esLog['_source']['message']
             if isinstance(esMsg, (list, tuple)):
                 esMsg = esMsg[0]
-            print >>rOut, u"{}/{}::'{}'".format(
-                esLog['_source']['fields']['servicepath'],
-                esLog['_source']['fields']['instance'],
-                esMsg
-            )
+            try:
+                print >>rOut, u"{}/{}::'{}'".format(
+                    esLog['_source']['fields']['servicepath'],
+                    esLog['_source']['fields']['instance'],
+                    esMsg
+                )
+            except:
+               print >>sys.stderr, "Ignoring returned message, missing source fields"
+               #print pformat(esLog)
+               #sys.exit(1) 
+              

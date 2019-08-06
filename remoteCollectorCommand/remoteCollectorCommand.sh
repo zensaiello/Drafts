@@ -2,7 +2,7 @@
 
 # Warning - POC quality - NOT READY FOR PRODUCTION
 # Example script to get data from a script, add the data to an event, have that data get into a SNOW incident.
- 
+
 # First step is to get the data from the switch.
 # Initial requirements have us running 3 commands
 # SH SYSTEM, SH INT, and SH LOG
@@ -16,7 +16,7 @@ IP=$1
 EVID=$2
 
 # failureName
-FAILURENAME=$3
+FAILURENAME=${3//[$'\t\r\n ']}
 
 cd /var/zenoss
 export USER=''
@@ -24,7 +24,6 @@ export SSHPASS=''
 export SSHKEY=''
 ZENOSS_URL="https://zenny123.zenoss.io/cz0"
 APIKEY="Zenny123"
-
 
 
 # Generic call to make Zenoss JSON API calls easier on the shell.
@@ -38,20 +37,20 @@ zenoss_api () {
        echo "Usage: zenoss_api <endpoint> <action> <method> <data>"
        return 1
    fi
-   
+
    #Debug
    #echo "{\"action\":\"$ROUTER_ACTION\",\"method\":\"$ROUTER_METHOD\",\"data\":[$DATA], \"tid\":1}" 1>&2
    retry=1
    until [ $retry -ge 3 ] ; do
        curl \
-           -m 10 -s \
+           -m 5 -s \
            -X POST \
            -H "Content-Type: application/json" \
            -H "z-api-key: $APIKEY" \
            -d "{\"action\":\"$ROUTER_ACTION\",\"method\":\"$ROUTER_METHOD\",\"data\":[$DATA], \"tid\":1}" \
            "$ZENOSS_URL/zport/dmd/$ROUTER_ENDPOINT" && break
        ((retry++))
-       echo "API call failed, retry $retry"
+       echo "API call failed, retry $retry" >&2
        sleep 3
    done
 }
@@ -71,8 +70,7 @@ zenoss_get_commands_from_uid() {
 
 zenoss_set_ssh_cred() {
     export USER=`zenoss_api properties_router PropertiesRouter getZenProperty "{\"uid\":\"$DEVICE_UID\",\"zProperty\":\"zCommandUsername\"}" | jq -ar '.result.data.valueAsString'`
-    # Hardcoding ssh password, if not using sshkey, since API doesn't seem to be able to pull password type zProperties
-    ##export SSHPASS=`zenoss_api properties_router PropertiesRouter getZenProperty "{\"uid\":\"$DEVICE_UID\",\"zProperty\":\"zCommandPassword\"}" | jq -ar '.result.data.valueAsString'`
+    #export SSHPASS=`zenoss_api properties_router PropertiesRouter getZenProperty "{\"uid\":\"$DEVICE_UID\",\"zProperty\":\"zCommandPassword\"}" | jq -ar '.result.data.valueAsString'`
     export SSHPASS='Zenny123'
     export SSHKEY=`zenoss_api properties_router PropertiesRouter getZenProperty "{\"uid\":\"$DEVICE_UID\",\"zProperty\":\"zKeyPath\"}" | jq -ar '.result.data.valueAsString'`
 }
@@ -83,6 +81,10 @@ zenoss_send_infoError() {
 
 
 DEVICE_UID=`zenoss_get_uid_from_ip`
+
+if [ -z "$DEVICE_UID" ] ; then
+   exit 1
+fi
 mapfile -t COMMANDS < <(zenoss_get_commands_from_uid)
 zenoss_set_ssh_cred
 
@@ -115,7 +117,7 @@ done
 for i in "${!COMMANDS[@]}"; do
     UPDATEDATA=`cat $EVID-$i.out| jq -aR --slurp .`
     zenoss_add_log_event  "$EVID" "${UPDATEDATA}" || exit 2
-    rm -f $EVID-$i.out
+    rm -f $EVID-$i.out $EVID-$i.err
 done
 
 # This should be it

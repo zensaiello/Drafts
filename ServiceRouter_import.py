@@ -20,11 +20,11 @@ zenInstance = urlparse(zenAPI.config['url']).hostname
 def ServiceRouter(sMethod, dData={}):
     zenAPI.setRouter('ServiceRouter')
     respData = zenAPI.callMethod(sMethod, **dData)
-    if not respData['result']['success']:
+    if not respData['result']['success'] and 'ObjectNotFoundException' not in respData['result'].get('msg', ''):
         print "ERROR: ServiceRouter %s method call non-successful" % sMethod
         print respData
         print "Data submitted was:"
-        print response.request.body
+        print respData
         exit(1)
     if 'services' in respData['result']:
         return respData['result']['services']
@@ -67,11 +67,22 @@ if __name__ == "__main__":
             'getInfo',
             dData={'uid': svcUid}
         )
-        # remove unNeeded attributes
-        del curSvcConfig['count']
-        del curSvcConfig['id']
-        del curSvcConfig['meta_type']
-        del curSvcConfig['inspector_type']
+        if curSvcConfig:
+            # remove unNeeded attributes
+            del curSvcConfig['count']
+            del curSvcConfig['id']
+            del curSvcConfig['meta_type']
+            del curSvcConfig['inspector_type']
+        else:
+            # Service does not exist, create before applying config
+            ServiceRouter(
+                'addClass',
+                dData={
+                    'contextUid': '/'.join(impSvcConfig['uid'].split('/')[:-2]),
+                    'id': impSvcConfig['uid'].split('/')[-1],
+                    'posQuery': {}
+                }
+            )
         if (curSvcConfig == impSvcConfig) is False:
             ServiceRouter(
                 'setInfo',

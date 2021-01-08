@@ -23,8 +23,6 @@ def ServiceRouter(sMethod, dData={}):
     if not respData['result']['success'] and 'ObjectNotFoundException' not in respData['result'].get('msg', ''):
         print "ERROR: ServiceRouter %s method call non-successful" % sMethod
         print respData
-        print "Data submitted was:"
-        print respData
         exit(1)
     if 'services' in respData['result']:
         return respData['result']['services']

@@ -17,6 +17,8 @@ def buildArgs():
                         help='Object type to search for. Can be defined multiple times')
     parser.add_argument('-a', dest='attributes', action='append', required=True,
                         help='Object attributes to compare & update. Can be defined multiple times')
+    parser.add_argument('-x', dest='dryRun', action='store_true', required=False,
+                        help='Do not make change on Destination')
     return parser.parse_args()
 
 
@@ -85,6 +87,10 @@ if __name__ == '__main__':
     args = vars(buildArgs())
     log, rOut = initScriptEnv(args)
 
+    if args['dryRun']:
+            log.info('DRY RUN, output forced into debug')
+            log.setLevel(10)
+
     syncChangeCount = 0
     notOnDestin = 0
 
@@ -115,12 +121,13 @@ if __name__ == '__main__':
         if sourceValues != destinValues:
             log.info('Object synced: "%s"', uid)
             log.debug('\nSOURCE:%r\nDESTIN:%r', sourceValues, destinValues)
-            # Update Special Attributes
-            if 'locking' in sourceValues:
-                devrouterLockComponents(destinAPI, uid, sourceValues['locking'].copy())
-                del sourceValues['locking']
-            # Update General Attributes
-            devrouterUidSetInfo(destinAPI, sourceValues)
+            if args['dryRun'] is False:
+                # Update Special Attributes
+                if 'locking' in sourceValues:
+                    devrouterLockComponents(destinAPI, uid, sourceValues['locking'].copy())
+                    del sourceValues['locking']
+                # Update General Attributes
+                devrouterUidSetInfo(destinAPI, sourceValues)
             syncChangeCount += 1
 
     log.info('Summary:\n%s objects modified on Destination\n%s Total Source objects found\n%s '

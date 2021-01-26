@@ -22,21 +22,18 @@ def buildArgs():
     return parser.parse_args()
 
 
-def idrouterSearch(oAPI, metaTypes):
-    oAPI.setRouter('IdentificationRouter')
+def searchrouterGetResults(oAPI, metaTypes):
+    oAPI.setRouter('SearchRouter')
     apiResponse = oAPI.callMethod(
-        'resolve',
-        id={
-            'query': {
-                'meta_type': metaTypes
-            }},
-        idScheme='global_catalog',
-        allowMultiple=True
+        'getAllResults',
+        query='*',
+        category=metaTypes
     )
-    if not apiResponse['result']['success']:
-        log.error('id_router rsolve method call non-successful: %r', apiResponse)
+    if not apiResponse['result'].get('total'):
+        log.error('search_router getAllResults method call non-successful: %r', apiResponse)
     else:
-        return apiResponse['result']['uids']
+        # extract uid (some reason it is keyed 'url') from search results
+        return [x['url'] for x in apiResponse['result']['results']]
 
 
 def devrouterUidAttrValues(oAPI, uid, attrNames):
@@ -88,8 +85,8 @@ if __name__ == '__main__':
     log, rOut = initScriptEnv(args)
 
     if args['dryRun']:
-            log.info('DRY RUN, output forced into debug')
-            log.setLevel(10)
+        log.info('DRY RUN updates will not be made to Destination, output forced into debug')
+        log.setLevel(10)
 
     syncChangeCount = 0
     notOnDestin = 0
@@ -105,7 +102,7 @@ if __name__ == '__main__':
         log.error('Issue communicating with Destination Instance API\n%r', e)
         sys.exit(1)
 
-    sourceUids = idrouterSearch(sourceAPI, args['metaTypes'])
+    sourceUids = searchrouterGetResults(sourceAPI, args['metaTypes'])
     # Check for results
     if not sourceUids:
         log.error("No %s objects found on source", args['metaTypes'])

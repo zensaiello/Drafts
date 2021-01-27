@@ -1,3 +1,4 @@
+import re
 import sys
 import zenApiLib
 from zapiScriptFunctions import getDefaultScriptArgParser, initScriptEnv
@@ -19,21 +20,21 @@ def buildArgs():
                         help='Object attributes to compare & update. Can be defined multiple times')
     parser.add_argument('-x', dest='dryRun', action='store_true', required=False,
                         help='Do not make change on Destination')
+    parser.add_argument('-f', dest='filterUid', action='store', required=False, default='',
+                        help='Filter to use on Zenoss object uid')
     return parser.parse_args()
 
 
 def searchrouterGetResults(oAPI, metaTypes):
     oAPI.setRouter('SearchRouter')
-    apiResponse = oAPI.callMethod(
-        'getAllResults',
-        query='*',
-        category=metaTypes
-    )
-    if not apiResponse['result'].get('total'):
-        log.error('search_router getAllResults method call non-successful: %r', apiResponse)
-    else:
-        # extract uid (some reason it is keyed 'url') from search results
-        return [x['url'] for x in apiResponse['result']['results']]
+    searchResults = []
+    for apiResponse in oAPI.pagingMethodCall('getAllResults', query='*', category=metaTypes):
+        if not apiResponse['result'].get('total'):
+            raise Exception('search_router getAllResults method call non-successful: %r', apiResponse)
+        else:
+            # extract uid (some reason it is keyed 'url') from search results
+            searchResults.extend( [x['url'] for x in apiResponse['result']['results']])
+    return searchResults
 
 
 def devrouterUidAttrValues(oAPI, uid, attrNames):
@@ -108,7 +109,19 @@ if __name__ == '__main__':
         log.error("No %s objects found on source", args['metaTypes'])
         sys.exit(1)
 
-    for uid in sourceUids:
+    totalSourceUids = len(sourceUids)
+    filteredSourceUids = 0
+    if args['filterUid']:
+        filterPattern = re.compile(args['filterUid'])
+        sourceUidsFiltered = [uid for uid in sourceUids if filterPattern.match(uid)]
+        filteredSourceUids = len(sourceUidsFiltered)
+        if totalSourceUids == filteredSourceUids:
+            log.error('Your filter of "%s" did not exclude any uids, total objects %s',
+                      args['filterUid'],
+                      totalSourceUids)
+    else:
+        sourceUidsFiltered = sourceUids
+    for uid in sourceUidsFiltered:
         destinValues = devrouterUidAttrValues(destinAPI, uid, args['attributes'])
         if destinValues is None:
             log.debug('Does not exist on destination instances: "%s"', uid)
@@ -127,5 +140,10 @@ if __name__ == '__main__':
                 devrouterUidSetInfo(destinAPI, sourceValues)
             syncChangeCount += 1
 
-    log.info('Summary:\n%s objects modified on Destination\n%s Total Source objects found\n%s '
-             'objects not found on Destination', syncChangeCount, len(sourceUids), notOnDestin)
+    log.info('Summary:\n%s objects modified on Destination\n%s objects excluded by "%s" filter\n'
+             '%s Total Source objects found\n%s objects not found on Destination',
+             syncChangeCount,
+             totalSourceUids - filteredSourceUids,
+             args['filterUid'],
+             totalSourceUids,
+             notOnDestin)

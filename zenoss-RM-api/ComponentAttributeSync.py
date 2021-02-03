@@ -49,7 +49,9 @@ def devrouterUidAttrValues(oAPI, uid, attrNames):
             return None
         log.error('device_router getInfo method call non-successful: %r', apiResponse)
     else:
-        return apiResponse['result']['data']
+        result = apiResponse['result']['data']
+        del result['uid']
+        return result
 
 
 def devrouterUidAttrExist(oAPI, uid, attrNames):
@@ -57,9 +59,9 @@ def devrouterUidAttrExist(oAPI, uid, attrNames):
     return all(attrName in apiData for attrName in attrNames)
 
 
-def devrouterUidSetInfo(oAPI, data):
+def devrouterUidSetInfo(oAPI, uid, data):
     oAPI.setRouter('DeviceRouter')
-    # uid info is defined in data
+    data['uid'] = uid
     apiResponse = oAPI.callMethod('setInfo', **data)
     if not apiResponse['result']['success']:
         log.error('device_router setInfo method call non-successful: %r', apiResponse)
@@ -79,6 +81,13 @@ def devrouterLockComponents(oAPI, uid, lockData):
     )
     if not apiResponse['result']['success']:
         log.error('device_router lockComponents method call non-successful: %r', apiResponse)
+
+
+def uidDeviceIdAllLowerCase(uid):
+    m = re.match("(.*/devices)/([a-zA-Z0-9-_.]+)/(.*)", uid)
+    if m:
+        return "{}/{}/{}".format(m.group(1), m.group(2).lower(), m.group(3))
+    return None
 
 
 if __name__ == '__main__':
@@ -122,12 +131,21 @@ if __name__ == '__main__':
     else:
         sourceUidsFiltered = sourceUids
     for uid in sourceUidsFiltered:
+        destinUid = None
         destinValues = devrouterUidAttrValues(destinAPI, uid, args['attributes'])
         if destinValues is None:
-            log.debug('Does not exist on destination instances: "%s"', uid)
-            notOnDestin += 1
-            continue
+            # Try UID again, but with lowercase deviceID UID
+            destinUid = uidDeviceIdAllLowerCase(uid)
+            if destinUid:
+                destinValues = devrouterUidAttrValues(destinAPI, destinUid, args['attributes'])
+            if destinValues is None:
+                log.debug('Does not exist on destination instances: "%s"', uid)
+                notOnDestin += 1
+                continue
         sourceValues = devrouterUidAttrValues(sourceAPI, uid, args['attributes'])
+        # reprucussions of destinUid
+        if destinUid:
+            uid = destinUid
         if sourceValues != destinValues:
             log.info('Object synced: "%s"', uid)
             log.debug('\nSOURCE:%r\nDESTIN:%r', sourceValues, destinValues)
@@ -137,13 +155,13 @@ if __name__ == '__main__':
                     devrouterLockComponents(destinAPI, uid, sourceValues['locking'].copy())
                     del sourceValues['locking']
                 # Update General Attributes
-                devrouterUidSetInfo(destinAPI, sourceValues)
+                devrouterUidSetInfo(destinAPI, uid, sourceValues)
             syncChangeCount += 1
 
-    log.info('Summary:\n%s objects modified on Destination\n%s objects excluded by "%s" filter\n'
+    log.info('Summary:\n%s objects modified on Destination\n%s objects did not match "%s" filter\n'
              '%s Total Source objects found\n%s objects not found on Destination',
              syncChangeCount,
-             totalSourceUids - filteredSourceUids,
+             (totalSourceUids - filteredSourceUids) if filteredSourceUids else 0,
              args['filterUid'],
              totalSourceUids,
              notOnDestin)

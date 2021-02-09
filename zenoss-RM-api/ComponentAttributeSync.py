@@ -143,6 +143,10 @@ if __name__ == '__main__':
                 notOnDestin += 1
                 continue
         sourceValues = devrouterUidAttrValues(sourceAPI, uid, args['attributes'])
+        if sourceValues is None:
+            # Should not happen, but it did once...
+            log.error('Does not exist on source instance: "%s". This should not happen and implies something is not right.', uid)
+            sys.exit(1)
         # reprucussions of destinUid
         if destinUid:
             uid = destinUid

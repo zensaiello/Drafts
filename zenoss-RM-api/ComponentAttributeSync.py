@@ -207,20 +207,24 @@ def compareAndSync():
             log.error('Does not exist on source instance: "%s". This should not happen and implies '
                       'something is not right.', uid)
             continue
+        # Sometimes the UID will be different between source/destin, see getDestinUidValues()
+        # Also, should get the 'uid' attribute out of the Values dicts
+        sourceUID = sourceValues.pop('uid')
+        destinUID = destinValues.pop('uid')
 
         if sourceValues == destinValues:
             log.debug('Values match."%s"', uid)
             count('Destination objects matching Source(no change made)')
         else:
-            log.info('Object synced: "%s"', uid)
-            log.debug('%s SOURCE:%r -- DESTIN:%r', uid, sourceValues, destinValues)
+            log.info('Object synced: "%s"', destinUID)
+            log.debug('%s SOURCE:%r -- DESTIN:%r', destinUID, sourceValues, destinValues)
             if args['dryRun'] is False:
                 # Update Special Attributes
                 if 'locking' in sourceValues:
-                    _devrouterLockComponents(destinObject, uid, sourceValues['locking'].copy())
+                    _devrouterLockComponents(destinObject, destinUID, sourceValues['locking'].copy())
                     del sourceValues['locking']
                 # Update General Attributes
-                _devrouterUidSetInfo(destinObject, uid, sourceValues)
+                _devrouterUidSetInfo(destinObject, destinUID, sourceValues)
             count('Destination objects updated')
 
 

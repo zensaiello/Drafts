@@ -95,13 +95,21 @@ def _devrouterUidAttrValues(oAPI, uid, attrNames):
         uid=uid,
         keys=attrNames
     )
-    if not apiResponse['result']['success']:
-        if 'ObjectNotFoundException' in apiResponse['result']['msg']:
+    if 'result' not in apiResponse:
+        log.error('device_router getInfo return unexpected API format: %r', apiResponse)
+        return None
+    elif 'success' in apiResponse['result'] and apiResponse['result']['success'] is False:
+        if 'msg' in apiResponse['result'] and 'ObjectNotFoundException' in apiResponse['result']['msg']:
             return None
-        log.error('device_router getInfo method call non-successful: %r', apiResponse)
-    else:
+        else:
+            log.error('device_router getInfo method call non-successful: %r', apiResponse)
+            return None
+    elif 'success' in apiResponse['result'] and apiResponse['result']['success'] is True:
         result = apiResponse['result']['data']
         return result
+    else:
+        log.error('device_router getInfo method call majorly unsuccessful: %r', apiResponse)
+        return None
 
 
 def _devrouterUidSetInfo(oAPI, uid, data):

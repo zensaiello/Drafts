@@ -101,6 +101,11 @@ def _devrouterUidAttrValues(oAPI, uid, attrNames):
     elif 'success' in apiResponse['result'] and apiResponse['result']['success'] is False:
         if 'msg' in apiResponse['result'] and 'ObjectNotFoundException' in apiResponse['result']['msg']:
             return None
+        elif 'msg' in apiResponse['result'] and 'Could not adapt' in apiResponse['result']['msg'] and \
+                    'Relationship at' in apiResponse['result']['msg']:
+            # Sometimes ObjectIds are the same as a relname on the object. If UID does not exist a red-herring
+            # error message will be thrown like "TypeError: ('Could not adapt', &lt;ToManyContRelationship at"
+            return None
         else:
             log.error('device_router getInfo method call non-successful: %r', apiResponse)
             return None
@@ -149,6 +154,11 @@ def iterGetSourceX():
     if args['filterUid']:
         filterPattern = re.compile(args['filterUid'])
     if isinstance(sourceObject, list):
+        # Warn if specified attributes are missing from file
+        if sourceObject and set(args['attributes']).issubset(sourceObject[0].keys()) is False:
+            log.error('Not all specified attributes "%r" are in the file "%r"', args['attributes'], sourceObject[0].keys())
+            sys.exit(1)
+
         for sourceValues in sourceObject:
             uid = sourceValues['uid']
             if args['filterUid'] and not filterPattern.match(uid):
@@ -219,6 +229,11 @@ def compareAndSync():
         # Also, should get the 'uid' attribute out of the Values dicts
         sourceUID = sourceValues.pop('uid')
         destinUID = destinValues.pop('uid')
+
+        # if source is a file, file could have more attributes than specified in args. extract 
+        # only the attributes specified in arg.
+        if isinstance(sourceObject, list):
+            sourceValues = {k: sourceValues[k] for k in args['attributes']}
 
         if sourceValues == destinValues:
             log.debug('Values match."%s"', uid)

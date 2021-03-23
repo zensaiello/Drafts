@@ -160,6 +160,9 @@ def iterGetSourceX():
             sys.exit(1)
 
         for sourceValues in sourceObject:
+            if not isinstance(sourceValues, dict):
+                log.error('Bad Entry in file, value is "%r"', sourceValues)
+                continue
             uid = sourceValues['uid']
             if args['filterUid'] and not filterPattern.match(uid):
                 count('Source objects excluded by filter')
@@ -199,7 +202,11 @@ def getSourceUidValues(uid):
 def writeSourceToFile():
     sourceData = []
     for uid in iterGetSourceX():
-        sourceData.append(getSourceUidValues(uid))
+        sourceValues = getSourceUidValues(uid)
+        if sourceValues and isinstance(sourceValues, dict):
+            sourceData.append(sourceValues)
+        else:
+            log.error('Bad Entry returned from API, entry value of "%r"', sourceValues)
     json.dump(sourceData, destinObject, indent=1)
     destinObject.close()
     count('Written to file {}'.format(args['destinationZ']), len(sourceData))

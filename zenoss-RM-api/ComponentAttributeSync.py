@@ -14,15 +14,18 @@ DESTIN_UID_PLUGINS = []
 
 
 # Example UID Destin plugin. If Destin UID is different than Source.
-# In most cases should not be needed, try to avoid needing a plugin
-def _uidDeviceIdAllLowerCase(uid):
-    """
-    Example Destin UID plugin. Use case, source DeviceName is Uppercase and destination is lowercase.
-    """
-    m = re.match("(.*/devices)/([a-zA-Z0-9-_.]+)/(.*)", uid)
-    if m:
-        return "{}/{}/{}".format(m.group(1), m.group(2).lower(), m.group(3))
-    return None
+# In most cases should not be needed, try to avoid needing a plugin.
+# def _uidDeviceIdAllLowerCase(uid):
+#     """
+#     Example Destin UID plugin. Use case, source DeviceName is Uppercase and destination is
+#     lowercase.
+#     """
+#     m = re.match("(.*/devices)/([a-zA-Z0-9-_.]+)/(.*)", uid)
+#     if m:
+#         return "{}/{}/{}".format(m.group(1), m.group(2).lower(), m.group(3))
+#     return None
+# Then added the method to the list of plugins to try. First plugin to find an object on the 
+# destination will be used.
 # DESTIN_UID_PLUGINS.append(_uidDeviceIdAllLowerCase)
 
 

@@ -1,15 +1,63 @@
+import argparse
 import json
+import logging
 import re
 import sys
 from pprint import pformat
 import zenApiLib
-from zapiScriptFunctions import getDefaultScriptArgParser, initScriptEnv
-
 
 filterPattern = None
 sourceObject = None
 destinObject = None
 counters = {}
+DESTIN_UID_PLUGINS = []
+
+
+# Example UID Destin plugin. If Destin UID is different than Source.
+# In most cases should not be needed, try to avoid needing a plugin
+def _uidDeviceIdAllLowerCase(uid):
+    """
+    Example Destin UID plugin. Use case, source DeviceName is Uppercase and destination is lowercase.
+    """
+    m = re.match("(.*/devices)/([a-zA-Z0-9-_.]+)/(.*)", uid)
+    if m:
+        return "{}/{}/{}".format(m.group(1), m.group(2).lower(), m.group(3))
+    return None
+# DESTIN_UID_PLUGINS.append(_uidDeviceIdAllLowerCase)
+
+
+def getDefaultScriptArgParser():
+    parser = argparse.ArgumentParser(description=None)
+    parser.add_argument('-v', dest='loglevel', action='store', type=int,
+                        default=30, help='Set script logging level (DEBUG=10,'
+                        ' INFO=20, WARN=30, ERROR=40, CRTITICAL=50)')
+    parser.add_argument('-p', dest='configFilePath', action='store',
+                        metavar="credsFilePath", default='', help='Default '
+                        'location being the same directory as the zenApiLib.py'
+                        'file')
+    parser.add_argument('-c', dest='configSection', action='store',
+                        metavar="credsSection", default='default',
+                        help='zenApiLib credential configuration section '
+                        '(default)')
+    parser.add_argument('-o', dest='outFileName', action='store', default=None,
+                        help="Output to file instead of stdout.")
+
+    return parser
+
+
+def initScriptEnv(args):
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s'
+    )
+    logging.getLogger().setLevel(args['loglevel'])
+    log = logging.getLogger(__file__)
+    log.setLevel(args['loglevel'])
+    if args['outFileName']:
+        rOut = open(args['outFileName'], 'w')
+    else:
+        rOut = sys.stdout
+
+    return log, rOut
 
 
 def buildArgs():
@@ -20,7 +68,7 @@ def buildArgs():
     parser.description = 'Component attribute sync'
     parser.add_argument('-s', dest='sourceZ', action='store', required=True,
                         help='Zenoss instance credential section to be used as the source or if '
-                            'starts with "file:" the file to use for Object Uid & attribute '
+                             'starts with "file:" the file to use for Object Uid & attribute '
                              'values')
     parser.add_argument('-d', dest='destinationZ', action='store', required=True,
                         help='Zenoss instance credential section to be used as the destination or '
@@ -102,9 +150,10 @@ def _devrouterUidAttrValues(oAPI, uid, attrNames):
         if 'msg' in apiResponse['result'] and 'ObjectNotFoundException' in apiResponse['result']['msg']:
             return None
         elif 'msg' in apiResponse['result'] and 'Could not adapt' in apiResponse['result']['msg'] and \
-                    'Relationship at' in apiResponse['result']['msg']:
-            # Sometimes ObjectIds are the same as a relname on the object. If UID does not exist a red-herring
-            # error message will be thrown like "TypeError: ('Could not adapt', &lt;ToManyContRelationship at"
+                'Relationship at' in apiResponse['result']['msg']:
+            # Sometimes ObjectIds are the same as a relname on the object. If UID does not exist a
+            # red-herring error message will be thrown like
+            # "TypeError: ('Could not adapt', &lt;ToManyContRelationship at"
             return None
         else:
             log.error('device_router getInfo method call non-successful: %r', apiResponse)
@@ -141,13 +190,6 @@ def _devrouterLockComponents(oAPI, uid, lockData):
         log.error('device_router lockComponents method call non-successful: %r', apiResponse)
 
 
-def _uidDeviceIdAllLowerCase(uid):
-    m = re.match("(.*/devices)/([a-zA-Z0-9-_.]+)/(.*)", uid)
-    if m:
-        return "{}/{}/{}".format(m.group(1), m.group(2).lower(), m.group(3))
-    return None
-
-
 def iterGetSourceX():
     # If Source is API, return Source UID
     # If Source is file, return source Values
@@ -156,7 +198,9 @@ def iterGetSourceX():
     if isinstance(sourceObject, list):
         # Warn if specified attributes are missing from file
         if sourceObject and set(args['attributes']).issubset(sourceObject[0].keys()) is False:
-            log.error('Not all specified attributes "%r" are in the file "%r"', args['attributes'], sourceObject[0].keys())
+            log.error('Not all specified attributes "%r" are in the file "%r"',
+                      args['attributes'],
+                      sourceObject[0].keys())
             sys.exit(1)
 
         for sourceValues in sourceObject:
@@ -180,16 +224,19 @@ def getDestinUidValues(uid):
     global destinObject, log
     if isinstance(destinObject, file):
         return True
-    # return _devrouterUidAttrValues(destinObject, uid, args['attributes'])
     # Specific use-case, where destin deviceIDs became lowercase....
     destinValues = _devrouterUidAttrValues(destinObject, uid, args['attributes'])
+    # Ideally component UID is identical between Zenoss instances
+    # Sometimes..  that is not the case, should be a last resort... try to avoid...
     if destinValues is None:
-        # Try UID again, but with lowercase deviceID UID
-        destinUid = _uidDeviceIdAllLowerCase(uid)
-        if destinUid:
-            destinValues = _devrouterUidAttrValues(destinObject, destinUid, args['attributes'])
-        if destinValues is None:
-            log.debug('Does not exist on destination instances: "%s"', uid)
+        for uidPlugin in DESTIN_UID_PLUGINS:
+            destinUid = uidPlugin(uid)
+            if destinUid:
+                destinValues = _devrouterUidAttrValues(destinObject, destinUid, args['attributes'])
+                if destinValues:
+                    log.debug('Found destination object, but had to use plugin: "%s"'
+                              ' for source "%s"', uidPlugin.__name__, uid)
+                    break
     return destinValues
 
 
@@ -214,16 +261,18 @@ def writeSourceToFile():
 
 def compareAndSync():
     for data in iterGetSourceX():
-        if isinstance(data, str):
-            uid = data
+        if isinstance(data, (str, unicode)):
+            uid = str(data)
         elif isinstance(data, dict):
             uid = data['uid']
+        else:
+            log.error("Data is an unknown type, %s - %r", type(data).__name__, data)
         destinValues = getDestinUidValues(uid)
         if destinValues is None:
             count('Source objects that did not exist on Destination')
             log.debug('Does not exist on destination instances: "%s"', uid)
             continue
-        if isinstance(data, str):
+        if isinstance(data, (str, unicode)):
             sourceValues = getSourceUidValues(uid)
         elif isinstance(data, dict):
             sourceValues = data
@@ -237,7 +286,7 @@ def compareAndSync():
         sourceUID = sourceValues.pop('uid')
         destinUID = destinValues.pop('uid')
 
-        # if source is a file, file could have more attributes than specified in args. extract 
+        # if source is a file, file could have more attributes than specified in args. extract
         # only the attributes specified in arg.
         if isinstance(sourceObject, list):
             sourceValues = {k: sourceValues[k] for k in args['attributes']}
